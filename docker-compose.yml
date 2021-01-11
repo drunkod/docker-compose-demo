@@ -1,28 +1,56 @@
-version: '3'
+---
+version: '3.6'
 services:
-  whoami:
-    image: containous/whoami # A container that exposes an API to show its IP address
-    labels:
-      - "traefik.frontend.rule=Host:whoami.docker.localhost"
+  sqlwp:
+    container_name: sqlwp
+    image: mariadb:${MARIADBVERSION}
+    restart: unless-stopped
+    volumes:
+      - datasqlwp:/var/lib/mysql
+    environment:
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+      MYSQL_USER: ${MYSQLUSER}
+      MYSQL_PASSWORD: ${MYSQLPASSWORD}
+      MYSQL_DATABASE: ${MYSQLDB}
+ 
+  nginxwp:
+    container_name: nginxforwp
+    image: nginx:${NGINXVERSION}
+    restart: unless-stopped
+    ports:
+      - 80:80    
+    volumes:
+      - datawp:/var/www/html
+      - datanginxlogs:/var/log/nginx/
+      - ./conf/nginx-wp:/etc/nginx/
+    links:
+      - wp
+
+  wp:
+    container_name: wpapp
+    image: wordpress:${WPVERSION}
+    restart: unless-stopped
+    volumes:
+      - ./conf/php.ini:/usr/local/etc/php/conf.d/custom.ini
+      - datawp:/var/www/html
+    depends_on:
+      - sqlwp
+    environment:
+      WORDPRESS_DB_HOST: sqlwp
+      WORDPRESS_DB_USER: ${MYSQLUSER}
+      WORDPRESS_DB_PASSWORD: ${MYSQLPASSWORD}
+      WORDPRESS_DB_NAME: ${MYSQLDB}
+      WORDPRESS_TABLE_PREFIX: ${MYSQLTABLEPREFIX}
 
   redis:
-    image: redis
-
-    networks:
-      - back-tier
-
-  reverse-proxy:
-    image: traefik 
-    command: --api --providers.docker --tracing.instana.logLevel="DEBUG" --accesslog # Enables the web UI and tells Traefik to listen to docker
-    ports:
-      - "80:80"     # The HTTP port
-      - "8080:8080" # The Web UI (enabled by --api)
+    container_name: redis
+    image: redis:${REDISVERSION}
+    restart: unless-stopped
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock # So that Traefik can listen to the Docker events
- 
+      - dataredis:/data
 
-networks:
-  front-tier:
-    driver: bridge
-  back-tier:
-    driver: bridge
+volumes:
+  datasqlwp:
+  datanginxlogs:
+  datawp:
+  dataredis:
